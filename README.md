@@ -1,5 +1,5 @@
 # midi2artnetTC
-rtpMidi Timecode to Artnet Timecode
+rtpMidi Timecode to Artnet Timecode based off the rtpMidi server from pymidi.
 
 Ideal for connecting qlab to Chamsys MagicQ or similar.
 
