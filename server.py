@@ -168,6 +168,12 @@ if __name__ == '__main__':
         hours = 0
         rate = 0
 
+        lastFrame = 30000 # make sure it sends the first one
+        lastSeconds = 0
+        lastMinutes = 0
+        lastHours = 0
+        lastRate = 0
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) #udp
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
@@ -190,44 +196,46 @@ if __name__ == '__main__':
                 if command.command == 240: #midi TC
                     value = int.from_bytes(command.params.unknown, byteorder='big')
                     tcPiece = (value & 0xF0) >> 4
+                    #print("Piece{0:d} {1:08b}".format(tcPiece, value))
                     if tcPiece == 0b0000:
                         # frame number LS bits
-                        #print("Piece0 "+str(bin(value)))
+                        # transmit the frame before updating piece0. below converts the multiple timecode updates per frame from midi into only updates for ATC
+                        if self.frames!=self.lastFrame or self.seconds!=self.lastSeconds or self.minutes!=self.lastMinutes or self.hours!=self.lastHours or self.rate!=self.lastRate:
+                            self.sock.sendto(pack('!8sHBBBBBBBBB',b"Art-Net",0x0097,0,14,0,0,self.frames,self.seconds,self.minutes,self.hours,self.rate),('<broadcast>', 6454))
+
+                            print("{0:02d}:{1:02d}:{2:02d}.{3:02d} Rate: {4:d}".format(self.hours, self.minutes, self.seconds, self.frames, self.rate))
+
+                            self.lastFrame = self.frames
+                            self.lastSeconds = self.seconds
+                            self.lastMinutes = self.minutes
+                            self.lastHours = self.hours
+                            self.lastRate = self.rate
+#                       else:
+#                           print("Skipping already-sent timecode")
+
                         self.frames = (self.frames & 0xF0) | (value & 0x0F)
                     if tcPiece == 0b0001:
                         # frame number MS bits
-                        #print("Piece1 "+str(bin(value)))
                         self.frames = (self.frames & 0x0F) | (value & 0x01) << 4
                     if tcPiece == 0b0010:
                         # second LS bits
-                        #print("Piece2 "+str(bin(value)))
                         self.seconds = (self.seconds & 0xF0) | (value & 0x0F)
                     if tcPiece == 0b0011:
                         # second MS bits 
-                        #print("Piece3 "+str(bin(value)))
                         self.seconds = (self.seconds & 0x0F) | (value & 0x03) << 4
                     if tcPiece == 0b0100:
                         # minute LS bits
-                        #print("Piece4 "+str(bin(value)))
                         self.minutes = (self.minutes & 0xF0) | (value & 0x0F)
                     if tcPiece == 0b0101:
                         # minutes MS bits
-                        #print("Piece5 "+str(bin(value)))
                         self.minutes = (self.minutes & 0x0F) | (value & 0x03) << 4
                     if tcPiece == 0b0110:
                         # hour LS bits
-                        #print("Piece6 "+str(bin(value)))
                         self.hours = (self.hours & 0xF0) | (value & 0x0F)
                     if tcPiece == 0b0111:
                         # hour MS bit & rate
-                        #print("Piece7 "+str(bin(value)))
                         self.hours = (self.hours & 0x0F) | (value & 0x01) << 4
                         self.rate = (value & 0x06) >> 1
-
-
-                    self.sock.sendto(pack('!8sHBBBBBBBBB',b"Art-Net",0x0097,0,14,0,0,self.frames,self.seconds,self.minutes,self.hours,self.rate),('<broadcast>', 6454))
-
-                    print(str(self.hours)+":"+str(self.minutes)+":"+str(self.seconds)+":"+str(self.frames)+" rate: "+str(self.rate))
 
 
 
