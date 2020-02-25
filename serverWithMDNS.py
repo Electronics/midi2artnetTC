@@ -16,7 +16,6 @@ from pymidi.protocol import ControlProtocol
 from pymidi import utils
 
 from zeroconf import IPVersion, ServiceInfo, Zeroconf
-import ifaddr
 
 try:
 	import coloredlogs
@@ -38,6 +37,11 @@ parser.add_option('-v', '--verbose',
 	dest='verbose',
 	default=False,
 	help='show verbose logs')
+parser.add_option('-i', '--ip',
+	dest="ip",
+	action="store",
+	default=None,
+	help="<ip> for bonjour/mDNS advertising to send out")
 
 
 class Handler(object):
@@ -249,35 +253,39 @@ if __name__ == '__main__':
 	server = Server.from_bind_addrs(bind_addrs)
 	server.add_handler(ExampleHandler())
 
-	adapters = ifaddr.get_adapters()
-	print("Bonjour/mDNS advertising on: ",end='')
-	ips = []
-	for adapter in adapters:
-		for ip in adapter.ips:
-			try:
-				ips.append(socket.inet_aton(ip.ip))
-				print(ip.ip+", ",end='')
-			except (socket.error, TypeError):
-				continue
-				# not an ipv4 address
-	print(".")
 	# mDNS/Bonjour stuff
-	info = ServiceInfo(
-		"_apple-midi._udp.local.",
-		"midi2Artnet._apple-midi._udp.local.",
-		addresses=[],
-		port=5051,
-		properties={},
-		server=socket.gethostname()
-	)
-	zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
-	zeroconf.register_service(info)
+	ip = options.ip
+	if not ip:
+		try:
+			ip = socket.gethostbyname(socket.gethostname()+".local")
+		except:
+			# if that fails for some reason?
+			try:
+				s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+				s.connect(("8.8.8.8",80))
+				ip = s.getsockname()[0]
+			except:
+				print("Really failed to find an IP address to advertise with zeroconf :( Try using -ip")
+	
+	if ip:
+		print("Advertising on interface with IP: "+ip)
+		info = ServiceInfo(
+			"_apple-midi._udp.local.",
+			"midi2Artnet._apple-midi._udp.local.",
+			addresses=[socket.inet_aton(ip)],
+			port=5051,
+			properties={},
+#			server=socket.gethostname()
+		)
+		zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+		zeroconf.register_service(info)
 
 	try:
 		server.serve_forever()
 	except KeyboardInterrupt:
 		logger.info('Got CTRL-C, quitting')
-		print("Unregistering...")
-		zeroconf.unregister_service(info)
-		zeroconf.close()
+		if ip:
+			print("Unregistering...")
+			zeroconf.unregister_service(info)
+			zeroconf.close()
 		sys.exit(0)
